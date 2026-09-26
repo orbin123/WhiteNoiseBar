@@ -1,0 +1,123 @@
+const $ = id => document.getElementById(id);
+const audio = new Audio(); audio.loop = true; audio.preload = 'auto';
+let tracks = [], currentId, shuffled = false, expanded = false, history = [], saved = {};
+try { saved = JSON.parse(localStorage.getItem('playback') || '{}'); } catch {}
+shuffled = Boolean(saved.shuffle); currentId = saved.id;
+function persist() { localStorage.setItem('playback', JSON.stringify({ id: currentId, shuffle: shuffled, time: audio.currentTime, playing: !audio.paused })); }
+function controls() {
+  $('play').textContent = audio.paused ? '▶' : '⏸'; $('play').setAttribute('aria-label', audio.paused ? 'Play' : 'Pause');
+  $('play').disabled = !tracks.length;
+  $('shuffle').setAttribute('aria-pressed', String(shuffled));
+  for (const tile of $('tracks').querySelectorAll('.track')) {
+    const selected = tile.dataset.id === currentId;
+    tile.classList.toggle('selected', selected);
+    tile.querySelector('.track-button').setAttribute('aria-pressed', String(selected));
+    tile.querySelector('.track-indicator').textContent = selected ? (audio.paused ? '▶' : 'Ⅱ') : '';
+    tile.querySelector('.timeline').hidden = !selected;
+  }
+  updateTimeline();
+}
+function formatTime(value) { const n = Math.floor(Number.isFinite(value) ? value : 0); return `${Math.floor(n/60)}:${String(n%60).padStart(2,'0')}`; }
+function updateTimeline() {
+  const tile = [...$('tracks').querySelectorAll('.track')].find(t => t.dataset.id === currentId); if (!tile) return;
+  const range = tile.querySelector('.seek'); const ready = Number.isFinite(audio.duration) && audio.duration > 0;
+  range.disabled = !ready; range.max = ready ? audio.duration : 1;
+  range.value = ready ? audio.currentTime : 0;
+  range.setAttribute('aria-valuetext', `${formatTime(audio.currentTime)} of ${formatTime(audio.duration)}`);
+  tile.querySelector('.time-label').textContent = `${formatTime(audio.currentTime)} / ${formatTime(audio.duration)}`;
+}
+async function removeTrack(id) {
+  try {
+    const wasCurrent = currentId === id, wasPlaying = !audio.paused;
+    const index = tracks.findIndex(t => t.id === id);
+    tracks = await window.whiteNoise.deleteTrack(id); history = history.filter(t => t !== id);
+    if (wasCurrent) {
+      audio.pause(); audio.removeAttribute('src'); audio.load(); currentId = undefined;
+      if (tracks.length) select(tracks[Math.min(index, tracks.length - 1)].id, wasPlaying, false);
+      else $('playback-status').textContent = 'No sounds yet. Add a YouTube link.';
+    }
+    render(); persist();
+  } catch (e) { $('playback-status').textContent = 'Could not delete sound. Please try again.'; }
+}
+function beginRename(id) {
+  document.querySelector('.rename-form')?.remove();
+  const track = tracks.find(t => t.id === id);
+  const tile = [...$('tracks').querySelectorAll('.track')].find(t => t.dataset.id === id);
+  if (!track || !tile) return;
+  const form = document.createElement('form'); form.className = 'rename-form';
+  const input = document.createElement('input'); input.className = 'rename-input'; input.type = 'text'; input.value = track.title; input.maxLength = 120; input.required = true; input.setAttribute('aria-label','Sound name');
+  const save = document.createElement('button'); save.type = 'submit'; save.textContent = 'Save';
+  const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = '×'; cancel.setAttribute('aria-label','Cancel rename');
+  const close = () => { form.remove(); tile.querySelector('.track-button')?.focus(); };
+  cancel.onclick = close;
+  form.onkeydown = event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); } };
+  input.oninput = () => input.setCustomValidity('');
+  form.onsubmit = async event => {
+    event.preventDefault();
+    if (!input.value.trim()) { input.setCustomValidity('Enter a sound name.'); input.reportValidity(); return; }
+    save.disabled = true; cancel.disabled = true; input.disabled = true;
+    try {
+      const updated = await window.whiteNoise.renameTrack(id, input.value);
+      const existing = tracks.find(t => t.id === id); if (existing) existing.title = updated.title;
+      render();
+      $('playback-status').textContent = currentId === id && !audio.paused ? 'Looping · ' + updated.title : 'Renamed to ' + updated.title;
+    } catch { save.disabled = false; cancel.disabled = false; input.disabled = false; $('playback-status').textContent = 'Could not rename sound. Please try again.'; input.focus(); }
+  };
+  form.append(input,save,cancel); tile.append(form); tile.scrollIntoView({block:'nearest'}); input.focus(); input.select();
+}
+function render() {
+  const scroll = $('tracks').scrollTop;
+  $('count').textContent = String(tracks.length).padStart(2,'0'); $('tracks').replaceChildren();
+  for (const track of tracks) {
+    const tile = document.createElement('div'); tile.className = 'track'; tile.dataset.id = track.id; tile.setAttribute('role','listitem');
+    const button = document.createElement('button'); button.className = 'track-button';
+    const icon = document.createElement('span'); icon.className = 'track-icon'; icon.textContent = track.id === 'brown' ? '≈' : track.id === 'pink' ? '≋' : '∿';
+    const copy = document.createElement('span'); copy.className = 'track-copy';
+    const title = document.createElement('span'); title.className = 'track-title'; title.textContent = track.title; title.title = track.title;
+    const source = document.createElement('span'); source.className = 'track-source'; source.textContent = track.source || 'Local audio';
+    const indicator = document.createElement('span'); indicator.className = 'track-indicator';
+    copy.append(title,source); button.append(icon,copy,indicator);
+    button.onclick = () => track.id === currentId ? toggle() : select(track.id, true);
+    tile.oncontextmenu = async event => { event.preventDefault(); const action = await window.whiteNoise.trackMenu(track.id); if (action === 'delete') await removeTrack(track.id); else if (action === 'rename') beginRename(track.id); };
+    button.onkeydown = event => { if ((event.shiftKey && event.key === 'F10') || event.key === 'ContextMenu') { event.preventDefault(); tile.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true })); } };
+    const timeline = document.createElement('div'); timeline.className = 'timeline';
+    const time = document.createElement('span'); time.className = 'time-label';
+    const range = document.createElement('input'); range.type = 'range'; range.className = 'seek'; range.min = '0'; range.step = '0.01'; range.setAttribute('aria-label', `Seek ${track.title}`);
+    range.oninput = () => { if (currentId === track.id && Number.isFinite(audio.duration)) { audio.currentTime = Math.min(Number(range.value), audio.duration); updateTimeline(); persist(); } };
+    timeline.append(time,range); tile.append(button,timeline); $('tracks').append(tile);
+  }
+  if (!tracks.length) { const empty = document.createElement('p'); empty.className = 'empty'; empty.textContent = 'Your quiet space starts with a sound. Click Add below.'; $('tracks').append(empty); }
+  $('tracks').scrollTop = scroll; controls();
+}
+function toggle() { if (!currentId) return; if (audio.paused) void play(); else { audio.pause(); $('playback-status').textContent = 'Paused · take your time.'; } }
+async function play() { try { await audio.play(); $('playback-status').textContent = 'Looping · ' + tracks.find(t => t.id === currentId)?.title; } catch { $('playback-status').textContent = 'Unable to play. Try selecting the sound again.'; } controls(); }
+function select(id, start = true, remember = true) {
+  const track = tracks.find(t => t.id === id); if (!track) return;
+  if (currentId && currentId !== id && remember) history.push(currentId);
+  currentId = id; audio.src = track.url; controls(); persist(); if (start) void play();
+}
+function next(direction) {
+  if (!tracks.length) return;
+  let id;
+  if (direction < 0 && shuffled && history.length) id = history.pop();
+  else if (shuffled && tracks.length > 1) { const options = tracks.filter(t => t.id !== currentId); id = options[Math.floor(Math.random()*options.length)].id; }
+  else id = tracks[(tracks.findIndex(t => t.id === currentId) + direction + tracks.length) % tracks.length].id;
+  select(id,true,direction > 0);
+}
+$('play').onclick = toggle;
+$('previous').onclick = () => next(-1); $('next').onclick = () => next(1);
+$('shuffle').onclick = () => { shuffled = !shuffled; controls(); persist(); };
+$('expand').onclick = async () => { expanded = !expanded; $('add-panel').hidden = !expanded; $('expand').setAttribute('aria-expanded',String(expanded)); $('plus').textContent = expanded ? '−' : '+'; await window.whiteNoise.resize(expanded); if (expanded) $('url').focus(); };
+window.whiteNoise.onProgress(percent => { $('status').textContent = `Downloading ${percent} · extracting audio…`; });
+$('add-form').onsubmit = async event => {
+  event.preventDefault(); $('submit').disabled = true; $('url').disabled = true; $('status').className = ''; $('status').textContent = 'Connecting to YouTube…';
+  try { const track = await window.whiteNoise.download($('url').value.trim()); tracks.push(track); render(); $('url').value = ''; $('status').textContent = `Added “${track.title}”.`; }
+  catch (e) { $('status').className = 'error'; $('status').textContent = e.message.replace(/^Error invoking remote method '[^']+': Error: /,''); }
+  finally { $('submit').disabled = false; $('url').disabled = false; }
+};
+audio.addEventListener('play', () => { controls(); persist(); }); audio.addEventListener('pause', () => { controls(); persist(); });
+for (const name of ['timeupdate','loadedmetadata','durationchange','seeked']) audio.addEventListener(name, updateTimeline);
+audio.addEventListener('error', () => { $('playback-status').textContent = 'Audio unavailable. Try another sound.'; controls(); });
+setInterval(() => { if (!audio.paused) persist(); }, 5000);
+window.addEventListener('beforeunload',persist);
+(async () => { try { tracks = await window.whiteNoise.getTracks(); render(); select(tracks.some(t => t.id === currentId) ? currentId : tracks[0]?.id, false); if (Number.isFinite(saved.time)) audio.addEventListener('loadedmetadata', () => { if (saved.time < audio.duration) audio.currentTime = saved.time; }, {once:true}); if (saved.playing) await play(); } catch { $('playback-status').textContent = 'Could not load your sound library.'; } })();
