@@ -6,6 +6,8 @@ WhiteNoiseBar is a small macOS menu bar player for continuous background sound. 
 
 ## What it does
 
+- Offers a speaker button in the top-right corner with a volume slider that adjusts only WhiteNoiseBar audio. The volume is remembered between launches; 0% mutes the app.
+
 - Plays local audio while the panel is hidden, with three playback modes.
 - Clicks on a sound to play it; clicking the selected sound pauses or resumes at the same position.
 - Shows a seek timeline along the bottom of the selected sound when you hover over it. Drag to change position.
@@ -13,6 +15,12 @@ WhiteNoiseBar is a small macOS menu bar player for continuous background sound. 
 - Imports YouTube audio through `yt-dlp` and FFmpeg, with download status inside the panel.
 - Offers **Rename sound** and **Delete sound** when you right-click a sound. The name is edited inside its tile; press Enter or Save to keep it, or Escape to cancel. Imported files are moved to the Mac Trash when deleted.
 - Remembers the selected sound, playback position, playing state, playback mode, and saved library between launches.
+
+### App volume
+
+Click the speaker at the top right to open the slider. Click outside it or press Escape to close it. This changes the player’s audio level without changing macOS volume.
+
+![App volume slider](docs/volume.png)
 
 ## Install and run
 

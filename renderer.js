@@ -11,7 +11,29 @@ let tracks = [], currentId, playbackMode = 'loop-one', expanded = false, history
 try { saved = JSON.parse(localStorage.getItem('playback') || '{}'); } catch {}
 playbackMode = playbackModes.includes(saved.mode) ? saved.mode : saved.shuffle ? 'shuffle' : 'loop-one';
 audio.loop = playbackMode === 'loop-one'; currentId = saved.id;
-function persist() { localStorage.setItem('playback', JSON.stringify({ id: currentId, mode: playbackMode, time: audio.currentTime, playing: !audio.paused })); }
+audio.volume = Number.isFinite(saved.volume) ? Math.max(0, Math.min(1, saved.volume)) : 1;
+function persist() { localStorage.setItem('playback', JSON.stringify({ id: currentId, mode: playbackMode, volume: audio.volume, time: audio.currentTime, playing: !audio.paused })); }
+function updateVolume() {
+  const percent = Math.round(audio.volume * 100);
+  $('volume').value = percent; $('volume-value').textContent = `${percent}%`;
+  $('volume').setAttribute('aria-valuetext', `${percent} percent`);
+  const waves = percent === 0 ? '<path d="m16 9 5 6m0-6-5 6"/>' : percent < 50 ? '<path d="M16 9a5 5 0 0 1 0 6"/>' : '<path d="M16 9a5 5 0 0 1 0 6m3-9a9 9 0 0 1 0 12"/>';
+  $('volume-button').innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4 6 8H2v8h4l5 4Z"/>${waves}</svg>`;
+  $('volume-button').setAttribute('aria-label', `App volume: ${percent}%. Adjust volume`);
+  $('volume-button').title = `App volume · ${percent}%`;
+}
+function closeVolume() { $('volume-panel').hidden = true; $('volume-button').setAttribute('aria-expanded','false'); }
+$('volume-button').onclick = () => {
+  const open = $('volume-panel').hidden;
+  $('volume-panel').hidden = !open; $('volume-button').setAttribute('aria-expanded', String(open));
+  if (open) $('volume').focus();
+};
+$('volume').oninput = () => { audio.volume = Number($('volume').value) / 100; updateVolume(); persist(); };
+audio.addEventListener('volumechange', updateVolume);
+document.addEventListener('pointerdown', event => { if (!event.target.closest('.volume-control')) closeVolume(); });
+document.addEventListener('keydown', event => { if (event.key === 'Escape' && !$('volume-panel').hidden) { closeVolume(); $('volume-button').focus(); event.preventDefault(); } });
+window.addEventListener('blur', closeVolume);
+updateVolume();
 function controls() {
   $('play').textContent = audio.paused ? '▶' : '⏸'; $('play').setAttribute('aria-label', audio.paused ? 'Play' : 'Pause');
   $('play').disabled = !tracks.length;
