@@ -4,7 +4,7 @@ const playbackModes = ['shuffle', 'loop-one', 'in-order'];
 const modeNames = { shuffle: 'Shuffle', 'loop-one': 'Loop One', 'in-order': 'In Order' };
 const modeIcons = {
   shuffle: '<path d="M3 7h17m-4-4 4 4-4 4M21 17H4m4-4-4 4 4 4"/>',
-  'loop-one': '<path d="M5 7a8 8 0 1 1-1 9M5 3v5H1"/><path d="m10 10 2-1v7m-2 0h4"/>',
+  'loop-one': '<path d="m17 3 3 3-3 3M20 6H6a3 3 0 0 0-3 3v2m4 10-3-3 3-3M4 18h14a3 3 0 0 0 3-3v-2"/><path d="m10 10 2-1v6"/>',
   'in-order': '<path d="M3 7h17m-4-4 4 4-4 4M3 17h17m-4-4 4 4-4 4"/>'
 };
 let tracks = [], currentId, playbackMode = 'loop-one', expanded = false, history = [], saved = {};
