@@ -6,13 +6,13 @@ WhiteNoiseBar is a small macOS menu bar player for continuous background sound. 
 
 ## What it does
 
-- Plays and loops local audio while the panel is hidden.
+- Plays local audio while the panel is hidden, with three playback modes.
 - Clicks on a sound to play it; clicking the selected sound pauses or resumes at the same position.
 - Shows a seek timeline along the bottom of the selected sound when you hover over it. Drag to change position.
-- Provides previous, next, and shuffle controls. Shuffle changes manual track navigation while the current sound continues to loop.
+- Provides previous and next controls, plus a mode button that cycles **Shuffle → Loop One → In Order**. Shuffle chooses a different sound when one finishes (or repeats if there is only one). Loop One repeats the current sound. In Order advances through the list and stops after the last sound. Each mode has its own icon.
 - Imports YouTube audio through `yt-dlp` and FFmpeg, with download status inside the panel.
 - Offers **Rename sound** and **Delete sound** when you right-click a sound. The name is edited inside its tile; press Enter or Save to keep it, or Escape to cancel. Imported files are moved to the Mac Trash when deleted.
-- Remembers the selected sound, playback position, playing state, shuffle state, and saved library between launches.
+- Remembers the selected sound, playback position, playing state, playback mode, and saved library between launches.
 
 ## Install and run
 
@@ -47,3 +47,5 @@ YouTube imports go to `~/Library/Application Support/WhiteNoiseBar/audio/`. Trac
 - `build.cjs` packages the Mac app.
 
 Run `npm run check` to check JavaScript syntax. The player window uses Electron context isolation and sandboxing, and downloader arguments are passed without a shell.
+
+Run `npm test` on macOS to verify actual end-of-audio behavior in all three modes using a temporary sound library. The checks also cover mode icons, switching without interrupting playback, single-sound libraries, and stopping at the end of the list.

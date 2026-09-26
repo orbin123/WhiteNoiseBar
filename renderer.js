@@ -1,13 +1,26 @@
 const $ = id => document.getElementById(id);
-const audio = new Audio(); audio.loop = true; audio.preload = 'auto';
-let tracks = [], currentId, shuffled = false, expanded = false, history = [], saved = {};
+const audio = new Audio(); audio.preload = 'auto';
+const playbackModes = ['shuffle', 'loop-one', 'in-order'];
+const modeNames = { shuffle: 'Shuffle', 'loop-one': 'Loop One', 'in-order': 'In Order' };
+const modeIcons = {
+  shuffle: '<path d="M3 7h17m-4-4 4 4-4 4M21 17H4m4-4-4 4 4 4"/>',
+  'loop-one': '<path d="M5 7a8 8 0 1 1-1 9M5 3v5H1"/><path d="m10 10 2-1v7m-2 0h4"/>',
+  'in-order': '<path d="M3 7h17m-4-4 4 4-4 4M3 17h17m-4-4 4 4-4 4"/>'
+};
+let tracks = [], currentId, playbackMode = 'loop-one', expanded = false, history = [], saved = {};
 try { saved = JSON.parse(localStorage.getItem('playback') || '{}'); } catch {}
-shuffled = Boolean(saved.shuffle); currentId = saved.id;
-function persist() { localStorage.setItem('playback', JSON.stringify({ id: currentId, shuffle: shuffled, time: audio.currentTime, playing: !audio.paused })); }
+playbackMode = playbackModes.includes(saved.mode) ? saved.mode : saved.shuffle ? 'shuffle' : 'loop-one';
+audio.loop = playbackMode === 'loop-one'; currentId = saved.id;
+function persist() { localStorage.setItem('playback', JSON.stringify({ id: currentId, mode: playbackMode, time: audio.currentTime, playing: !audio.paused })); }
 function controls() {
   $('play').textContent = audio.paused ? '▶' : '⏸'; $('play').setAttribute('aria-label', audio.paused ? 'Play' : 'Pause');
   $('play').disabled = !tracks.length;
-  $('shuffle').setAttribute('aria-pressed', String(shuffled));
+  const modeButton = $('playback-mode');
+  const nextMode = playbackModes[(playbackModes.indexOf(playbackMode) + 1) % playbackModes.length];
+  modeButton.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${modeIcons[playbackMode]}</svg>`;
+  modeButton.dataset.mode = playbackMode;
+  modeButton.setAttribute('aria-label', `Playback mode: ${modeNames[playbackMode]}. Switch to ${modeNames[nextMode]}`);
+  modeButton.title = `${modeNames[playbackMode]} · Click for ${modeNames[nextMode]}`;
   for (const tile of $('tracks').querySelectorAll('.track')) {
     const selected = tile.dataset.id === currentId;
     tile.classList.toggle('selected', selected);
@@ -60,7 +73,7 @@ function beginRename(id) {
       const updated = await window.whiteNoise.renameTrack(id, input.value);
       const existing = tracks.find(t => t.id === id); if (existing) existing.title = updated.title;
       render();
-      $('playback-status').textContent = currentId === id && !audio.paused ? 'Looping · ' + updated.title : 'Renamed to ' + updated.title;
+      $('playback-status').textContent = currentId === id && !audio.paused ? (playbackMode === 'loop-one' ? 'Looping · ' : 'Playing · ') + updated.title : 'Renamed to ' + updated.title;
     } catch { save.disabled = false; cancel.disabled = false; input.disabled = false; $('playback-status').textContent = 'Could not rename sound. Please try again.'; input.focus(); }
   };
   form.append(input,save,cancel); tile.append(form); tile.scrollIntoView({block:'nearest'}); input.focus(); input.select();
@@ -90,7 +103,7 @@ function render() {
   $('tracks').scrollTop = scroll; controls();
 }
 function toggle() { if (!currentId) return; if (audio.paused) void play(); else { audio.pause(); $('playback-status').textContent = 'Paused · take your time.'; } }
-async function play() { try { await audio.play(); $('playback-status').textContent = 'Looping · ' + tracks.find(t => t.id === currentId)?.title; } catch { $('playback-status').textContent = 'Unable to play. Try selecting the sound again.'; } controls(); }
+async function play() { try { await audio.play(); $('playback-status').textContent = (playbackMode === 'loop-one' ? 'Looping · ' : 'Playing · ') + tracks.find(t => t.id === currentId)?.title; } catch { $('playback-status').textContent = 'Unable to play. Try selecting the sound again.'; } controls(); }
 function select(id, start = true, remember = true) {
   const track = tracks.find(t => t.id === id); if (!track) return;
   if (currentId && currentId !== id && remember) history.push(currentId);
@@ -99,14 +112,26 @@ function select(id, start = true, remember = true) {
 function next(direction) {
   if (!tracks.length) return;
   let id;
-  if (direction < 0 && shuffled && history.length) id = history.pop();
-  else if (shuffled && tracks.length > 1) { const options = tracks.filter(t => t.id !== currentId); id = options[Math.floor(Math.random()*options.length)].id; }
+  if (direction < 0 && playbackMode === 'shuffle' && history.length) id = history.pop();
+  else if (playbackMode === 'shuffle' && tracks.length > 1) { const options = tracks.filter(t => t.id !== currentId); id = options[Math.floor(Math.random()*options.length)].id; }
   else id = tracks[(tracks.findIndex(t => t.id === currentId) + direction + tracks.length) % tracks.length].id;
   select(id,true,direction > 0);
 }
 $('play').onclick = toggle;
 $('previous').onclick = () => next(-1); $('next').onclick = () => next(1);
-$('shuffle').onclick = () => { shuffled = !shuffled; controls(); persist(); };
+$('playback-mode').onclick = () => {
+  playbackMode = playbackModes[(playbackModes.indexOf(playbackMode) + 1) % playbackModes.length];
+  audio.loop = playbackMode === 'loop-one'; controls(); persist();
+  $('playback-status').textContent = `Playback mode · ${modeNames[playbackMode]}`;
+};
+audio.addEventListener('ended', () => {
+  if (!tracks.length) return;
+  if (playbackMode === 'shuffle') { next(1); return; }
+  if (playbackMode === 'loop-one') { audio.currentTime = 0; void play(); return; }
+  const index = tracks.findIndex(t => t.id === currentId);
+  if (index >= 0 && index + 1 < tracks.length) select(tracks[index + 1].id, true);
+  else { controls(); persist(); $('playback-status').textContent = 'Finished · end of your sound list.'; }
+});
 $('expand').onclick = async () => { expanded = !expanded; $('add-panel').hidden = !expanded; $('expand').setAttribute('aria-expanded',String(expanded)); $('plus').textContent = expanded ? '−' : '+'; await window.whiteNoise.resize(expanded); if (expanded) $('url').focus(); };
 window.whiteNoise.onProgress(percent => { $('status').textContent = `Downloading ${percent} · extracting audio…`; });
 $('add-form').onsubmit = async event => {

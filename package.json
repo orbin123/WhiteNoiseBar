@@ -6,7 +6,8 @@
   "scripts": {
     "start": "electron .",
     "package": "node build.cjs",
-    "check": "node --check main.js && node --check preload.js && node --check renderer.js"
+    "check": "node --check main.js && node --check preload.js && node --check renderer.js",
+    "test": "node tests/run-playback.cjs"
   },
   "keywords": [],
   "author": "",
