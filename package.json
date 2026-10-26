@@ -1,13 +1,13 @@
 {
   "name": "whitenoisebar",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A quiet macOS menu bar sound player",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "package": "node build.cjs",
     "check": "node --check main.js && node --check preload.js && node --check renderer.js",
-    "test": "node tests/run-playback.cjs && node tests/run-playback.cjs volume.js"
+    "test": "node tests/run-playback.cjs && node tests/run-playback.cjs volume.js && node tests/run-playback.cjs libraries.js && node tests/run-library-imports.cjs"
   },
   "keywords": [],
   "author": "",

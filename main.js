@@ -16,14 +16,18 @@ async function saveTracks() {
   await fs.writeFile(file + '.tmp', JSON.stringify(tracks, null, 2));
   await fs.rename(file + '.tmp', file);
 }
-function publicTracks() { return tracks.map(t => ({ ...t, url: `noise://audio/${t.id}` })); }
+function checkLibrary(library = 'white-noise') {
+  if (!['white-noise', 'music'].includes(library)) throw new Error('Invalid library.');
+  return library;
+}
+function publicTracks(library = 'white-noise') { return tracks.filter(t => t.library === library).map(t => ({ ...t, url: `noise://audio/${t.id}` })); }
 function position() {
   const b = tray.getBounds(), area = screen.getDisplayNearestPoint({ x: b.x, y: b.y }).workArea;
   const [w, h] = win.getSize();
   win.setPosition(Math.round(Math.max(area.x, Math.min(b.x + b.width / 2 - w / 2, area.x + area.width - w))), Math.round(Math.min(b.y + b.height + 6, area.y + area.height - h)));
 }
 function show() { if (!win || !tray) return; position(); win.show(); win.focus(); }
-function runDownload(url) {
+function runDownload(url, library) {
   if (activeDownload) throw new Error('A download is already in progress.');
   let u; try { u = new URL(url); } catch { throw new Error('Paste a valid YouTube link.'); }
   if (u.protocol !== 'https:' || !['youtube.com','www.youtube.com','m.youtube.com','music.youtube.com','youtu.be'].includes(u.hostname) || u.username || u.password) throw new Error('Please use an https YouTube video link.');
@@ -50,7 +54,7 @@ function runDownload(url) {
         const audioPath = path.resolve(result.filepath);
         if (path.dirname(audioPath) !== path.join(dataDir,'audio')) throw new Error('Unexpected audio location.');
         await fs.access(audioPath);
-        const track = { id, title: result.title || 'YouTube audio', path: audioPath, source: 'YouTube' };
+        const track = { id, title: result.title || 'YouTube audio', path: audioPath, source: 'YouTube', library };
         await mutateLibrary(async () => { tracks.push(track);
         try { await saveTracks(); } catch (e) { tracks = tracks.filter(t => t.id !== track.id); throw e; } });
         finish(null, { ...track, url: `noise://audio/${id}` });
@@ -66,14 +70,15 @@ app.whenReady().then(async () => {
     const saved = JSON.parse(await fs.readFile(path.join(dataDir, 'tracks.json'), 'utf8'));
     if (!Array.isArray(saved)) throw new Error('Invalid library');
     libraryLoaded = true;
-    tracks = saved.filter(t => typeof t.id === 'string' && typeof t.title === 'string' && typeof t.path === 'string');
+    tracks = saved.filter(t => typeof t.id === 'string' && typeof t.title === 'string' && typeof t.path === 'string')
+      .map(t => ({ ...t, library: t.library === 'music' ? 'music' : 'white-noise' }));
   } catch (error) {
     if (error.code !== 'ENOENT') await fs.copyFile(path.join(dataDir,'tracks.json'), path.join(dataDir,`tracks-backup-${Date.now()}.json`)).catch(() => {});
   }
   for (const [id, title] of [['white','White noise'],['pink','Pink noise'],['brown','Brown noise']]) {
     const existing = tracks.find(t => t.id === id);
     const asset = path.join(__dirname,'assets',`${id}.wav`);
-    if (existing) existing.path = asset; else if (!libraryLoaded) tracks.push({ id, title, path: asset, source: 'Built-in · seamless loop' });
+    if (existing) existing.path = asset; else if (!libraryLoaded) tracks.push({ id, title, path: asset, source: 'Built-in · seamless loop', library: 'white-noise' });
   }
   await saveTracks();
   protocol.handle('noise', async request => {
@@ -110,13 +115,15 @@ app.whenReady().then(async () => {
   tray.on('click', () => win.isVisible() ? win.hide() : show());
   tray.on('right-click', () => tray.popUpContextMenu(Menu.buildFromTemplate([{label:'Show WhiteNoiseBar',click:show},{type:'separator'},{label:'Quit WhiteNoiseBar',click:()=>app.quit()}])));
   function trusted(event) { if (event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) throw new Error('Invalid sender'); }
-  ipcMain.handle('get-tracks', event => { trusted(event); return publicTracks(); });
+  ipcMain.handle('get-tracks', (event, library) => { trusted(event); return publicTracks(checkLibrary(library)); });
   ipcMain.handle('track-menu', (event, id) => {
     trusted(event);
-    if (!tracks.some(t => t.id === id)) return false;
+    const track = tracks.find(t => t.id === id);
+    if (!track) return false;
     return new Promise(resolve => {
       let selected = null; contextMenuOpen = true;
-      Menu.buildFromTemplate([{ label: 'Rename sound', click: () => { selected = 'rename'; } }, { label: 'Delete sound', click: () => { selected = 'delete'; } }]).popup({ window: win, callback: () => {
+      const noun = track.library === 'music' ? 'track' : 'sound';
+      Menu.buildFromTemplate([{ label: `Rename ${noun}`, click: () => { selected = 'rename'; } }, { label: `Delete ${noun}`, click: () => { selected = 'delete'; } }]).popup({ window: win, callback: () => {
         contextMenuOpen = false;
         if (selected === 'rename') { win.show(); win.focus(); }
         else if (!win.isFocused()) win.hide();
@@ -135,11 +142,13 @@ app.whenReady().then(async () => {
       return { ...track, url: `noise://audio/${track.id}` };
     });
   });
-  ipcMain.handle('delete-track', (event, id) => {
+  ipcMain.handle('delete-track', (event, id, library) => {
     trusted(event);
+    library = checkLibrary(library);
     return mutateLibrary(async () => {
       const track = tracks.find(t => t.id === id);
-      if (!track) return publicTracks();
+      if (!track) return publicTracks(library);
+      if (track.library !== library) throw new Error('Track belongs to another library.');
       const previous = tracks; tracks = tracks.filter(t => t.id !== id);
       try { await saveTracks(); } catch (e) { tracks = previous; throw e; }
       // Only imported audio owned by this app may be moved to Trash.
@@ -147,12 +156,12 @@ app.whenReady().then(async () => {
         try { await fs.access(track.path); await shell.trashItem(track.path); }
         catch (e) { if (e.code !== 'ENOENT') { tracks = previous; await saveTracks(); throw e; } }
       }
-      return publicTracks();
+      return publicTracks(library);
     });
   });
-  ipcMain.handle('download-youtube', async (event, url) => { trusted(event); if (typeof url !== 'string' || url.length > 2048) throw new Error('Invalid link'); return runDownload(url); });
+  ipcMain.handle('download-youtube', async (event, url, library) => { trusted(event); if (typeof url !== 'string' || url.length > 2048) throw new Error('Invalid link'); return runDownload(url, checkLibrary(library)); });
   ipcMain.handle('resize-window', (event, expanded) => { trusted(event); win.setSize(320, expanded ? 540 : 410); position(); });
-  await win.loadFile('index.html');
+  await win.loadFile(path.join(__dirname, 'index.html'));
   if (process.env.WNB_SMOKE_TEST) {
     await new Promise(r => setTimeout(r, 1000));
     const result = await win.webContents.executeJavaScript(process.env.WNB_TEST_SCRIPT ? await fs.readFile(process.env.WNB_TEST_SCRIPT, "utf8") : `(async () => { const t = await window.whiteNoise.getTracks(); const a = new Audio(t[0].url); a.muted = true; await a.play(); a.pause(); document.querySelector('#expand').click(); return {tracks:t.length,audioReady:a.readyState,expanded:document.querySelector('#expand').getAttribute('aria-expanded'),cards:document.querySelectorAll('.track').length}; })()`);

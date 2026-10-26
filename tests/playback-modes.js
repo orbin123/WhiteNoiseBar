@@ -45,7 +45,7 @@
     assert(button.getAttribute('aria-label').includes(modeNames[expected]), 'Mode accessibility label is wrong');
   }
   assert(icons.size === 3, 'Modes must have distinct icons');
-  assert(JSON.parse(localStorage.getItem('playback')).mode === 'in-order', 'Mode not persisted');
+  assert(JSON.parse(localStorage.getItem('playback:white-noise')).mode === 'in-order', 'Mode not persisted');
 
   tracks = [tracks[0]]; render(); mode('shuffle'); await nearEnd(); const count = endedCount;
   await until(() => endedCount > count && !audio.paused && audio.currentTime < 2, 'Single-sound shuffle did not repeat');

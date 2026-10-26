@@ -6,6 +6,9 @@ WhiteNoiseBar is a small macOS menu bar player for continuous background sound. 
 
 ## What it does
 
+- Click the icon/title inside the player to choose **White noise** or **Music**. Music starts empty; use Add to paste YouTube links just as you do for sounds. Libraries, names, shuffle history, playback modes, and positions stay separate. Switching pauses playback; press Play to continue in the chosen library. The app remembers the last library you used. Music defaults to In Order, while White noise defaults to Loop One. App volume is shared.
+- Existing libraries and playback settings migrate to White noise, preserving your sounds. Imports stay in the library where they were started, even if you switch while a download is running.
+
 - Offers a speaker button in the top-right corner with a volume slider that adjusts only WhiteNoiseBar audio. The volume is remembered between launches; 0% mutes the app.
 
 - Plays local audio while the panel is hidden, with three playback modes.
@@ -44,7 +47,7 @@ The bundle is created at `dist/WhiteNoiseBar-darwin-arm64/WhiteNoiseBar.app`. Co
 
 ## Where audio is stored
 
-YouTube imports go to `~/Library/Application Support/WhiteNoiseBar/audio/`. Track details are saved in `~/Library/Application Support/WhiteNoiseBar/tracks.json`. Built-in noise files are bundled in `assets/`. Download only audio that you have permission to save. Some YouTube videos may be unavailable or require authentication.
+YouTube imports go to `~/Library/Application Support/WhiteNoiseBar/audio/`. Each track is assigned to White noise or Music; both libraries are stored in `~/Library/Application Support/WhiteNoiseBar/tracks.json`. Built-in noise files are bundled in `assets/`. Download only audio that you have permission to save. Some YouTube videos may be unavailable or require authentication.
 
 ## Project files
 
@@ -56,4 +59,4 @@ YouTube imports go to `~/Library/Application Support/WhiteNoiseBar/audio/`. Trac
 
 Run `npm run check` to check JavaScript syntax. The player window uses Electron context isolation and sandboxing, and downloader arguments are passed without a shell.
 
-Run `npm test` on macOS to verify actual end-of-audio behavior in all three modes using a temporary sound library. The checks also cover mode icons, switching without interrupting playback, single-sound libraries, and stopping at the end of the list.
+Run `npm test` on macOS to verify actual end-of-audio behavior in all three modes using a temporary sound library. The checks also cover mode icons, switching playback modes without interrupting playback, single-sound libraries, and stopping at the end of the list. Library checks cover the empty Music view, library switching, independent positions and playback modes, legacy migration, importing while switching, renaming, deletion, and persistence across restarts. Import checks substitute local audio for the external YouTube download process; they exercise the real IPC, storage, and audio decoder without network access.
